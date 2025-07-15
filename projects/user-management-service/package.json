@@ -22,7 +22,11 @@
     "migrate:create": "node migrations/migrate.js create",
     "db:setup": "npm run migrate",
     "db:reset": "echo 'Warning: This will drop all tables. Use with caution.' && read -p 'Continue? (y/N): ' confirm && [ \"$confirm\" = 'y' ] && npm run db:drop && npm run migrate",
-    "db:drop": "node -e \"const { Client } = require('pg'); const client = new Client(process.env.DATABASE_URL); client.connect().then(() => client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')).then(() => client.end()).catch(console.error);\""
+    "db:drop": "node -e \"const { Client } = require('pg'); const client = new Client(process.env.DATABASE_URL); client.connect().then(() => client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')).then(() => client.end()).catch(console.error);\"",
+    "admin:dev": "cd admin-panel && npm run dev",
+    "admin:build": "cd admin-panel && npm run build",
+    "admin:install": "cd admin-panel && npm install",
+    "admin:setup": "npm run admin:install && npm run admin:build"
   },
   "keywords": [
     "fastgpt",

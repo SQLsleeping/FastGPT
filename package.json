@@ -15,7 +15,11 @@
     "create:i18n": "node ./scripts/i18n/index.js",
     "lint": "eslint \"**/*.{ts,tsx}\" --fix --ignore-path .eslintignore",
     "test": "vitest run",
-    "test:workflow": "vitest run workflow"
+    "test:workflow": "vitest run workflow",
+    "admin:dev": "cd projects/admin-panel && npm run dev",
+    "admin:build": "cd projects/admin-panel && npm run build",
+    "admin:install": "cd projects/admin-panel && npm install",
+    "admin:setup": "npm run admin:install && npm run admin:build"
   },
   "devDependencies": {
     "@chakra-ui/cli": "^2.4.1",
