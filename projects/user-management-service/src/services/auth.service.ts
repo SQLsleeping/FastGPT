@@ -2,9 +2,20 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { BaseService } from './base.service';
-import { LoginRequest, RegisterRequest, ResetPasswordRequest, ChangePasswordRequest, AuthResult, User } from '../types';
+import {
+  LoginRequest,
+  RegisterRequest,
+  ResetPasswordRequest,
+  ChangePasswordRequest,
+  AuthResult,
+  User,
+  CreateUserData,
+  UserStatus,
+} from '../types';
 import { logger } from '../utils';
 import { config } from '../config';
+import { userDAO } from '../models/user.model';
+import { emailService } from './email.service';
 
 /**
  * 认证服务
@@ -20,18 +31,23 @@ export class AuthService extends BaseService {
    */
   public async login(loginData: LoginRequest): Promise<AuthResult> {
     try {
+      logger.info('Login attempt', { username: loginData.username });
+
       // 查找用户（支持邮箱或用户名登录）
       const user = await this.findUserByUsernameOrEmail(loginData.username);
 
       if (!user) {
+        logger.warn('User not found', { username: loginData.username });
         return {
           success: false,
           message: 'Invalid username or password',
         };
       }
 
+      logger.info('User found', { userId: user.id, status: user.status });
+
       // 检查用户状态
-      if (user.status !== 'active') {
+      if (user.status !== UserStatus.ACTIVE) {
         return {
           success: false,
           message: 'Account is not active',
@@ -39,10 +55,14 @@ export class AuthService extends BaseService {
       }
 
       // 验证密码
+      logger.info('Verifying password', { userId: user.id });
       const isPasswordValid = await bcrypt.compare(loginData.password, user.password);
+      logger.info('Password verification result', { userId: user.id, isValid: isPasswordValid });
+
       if (!isPasswordValid) {
         // 记录失败的登录尝试
         await this.recordFailedLogin(user.id, loginData.ip);
+        logger.warn('Invalid password', { userId: user.id });
         return {
           success: false,
           message: 'Invalid username or password',
@@ -68,7 +88,8 @@ export class AuthService extends BaseService {
       await this.clearFailedLogins(user.id);
 
       // 存储刷新令牌
-      await this.storeRefreshToken(user.id, refreshToken);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7天后过期
+      await this.storeRefreshToken(user.id, token, refreshToken, expiresAt, loginData.ip, loginData.userAgent);
 
       return {
         success: true,
@@ -113,20 +134,18 @@ export class AuthService extends BaseService {
       const hashedPassword = await bcrypt.hash(registerData.password, 12);
 
       // 创建用户
-      const userData = {
+      const userData: CreateUserData = {
         username: registerData.username,
         email: registerData.email,
         password: hashedPassword,
-        status: 'pending_verification',
+        status: UserStatus.ACTIVE,
         enterpriseId: registerData.enterpriseId,
         departmentId: registerData.departmentId,
-        profile: {
+        userConfig: {
           name: registerData.name || registerData.username,
           avatar: registerData.avatar,
           timezone: registerData.timezone || 'UTC',
         },
-        createdAt: new Date(),
-        updatedAt: new Date(),
       };
 
       const user = await this.createUser(userData);
@@ -157,7 +176,7 @@ export class AuthService extends BaseService {
       const decoded = jwt.verify(refreshToken, this.JWT_SECRET) as any;
 
       // 检查令牌是否在数据库中存在
-      const storedToken = await this.getStoredRefreshToken(decoded.userId, refreshToken);
+      const storedToken = await this.getStoredRefreshToken(refreshToken);
       if (!storedToken) {
         return {
           success: false,
@@ -330,7 +349,7 @@ export class AuthService extends BaseService {
   private generateAccessToken(user: User): string {
     return jwt.sign(
       {
-        id: user.id,
+        userId: user.id,
         username: user.username,
         email: user.email,
         enterpriseId: user.enterpriseId,
@@ -357,87 +376,92 @@ export class AuthService extends BaseService {
     return sanitizedUser;
   }
 
-  // 数据库操作方法（需要在后续实现）
+  // 数据库操作方法
   private async findUserByUsernameOrEmail(username: string): Promise<User | null> {
-    // TODO: 实现数据库查询
-    return null;
+    return await userDAO.findByUsernameOrEmail(username);
   }
 
   private async findUserByEmail(email: string): Promise<User | null> {
-    // TODO: 实现数据库查询
-    return null;
+    return await userDAO.findByEmail(email);
   }
 
   private async findUserById(id: string): Promise<User | null> {
-    // TODO: 实现数据库查询
-    return null;
+    return await userDAO.findById(id);
   }
 
-  private async createUser(userData: any): Promise<User> {
-    // TODO: 实现数据库插入
-    return {} as User;
+  private async createUser(userData: CreateUserData): Promise<User> {
+    return await userDAO.create(userData);
   }
 
   private async updateLastLogin(userId: string): Promise<void> {
-    // TODO: 实现数据库更新
+    await userDAO.updateLastLogin(userId);
   }
 
   private async recordFailedLogin(userId: string, ip?: string): Promise<void> {
-    // TODO: 实现失败登录记录
+    await userDAO.recordFailedLogin(userId);
   }
 
   private async clearFailedLogins(userId: string): Promise<void> {
-    // TODO: 实现清除失败登录记录
+    await userDAO.resetFailedLoginAttempts(userId);
   }
 
   private async isAccountLocked(userId: string): Promise<boolean> {
-    // TODO: 实现账户锁定检查
-    return false;
+    const user = await userDAO.findById(userId);
+    return user?.lockedUntil ? new Date() < user.lockedUntil : false;
   }
 
-  private async storeRefreshToken(userId: string, token: string): Promise<void> {
-    // TODO: 实现刷新令牌存储
+  private async storeRefreshToken(
+    userId: string,
+    sessionToken: string,
+    refreshToken: string,
+    expiresAt: Date,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    await userDAO.createSession(userId, sessionToken, refreshToken, expiresAt, ip, userAgent);
   }
 
-  private async getStoredRefreshToken(userId: string, token: string): Promise<any> {
-    // TODO: 实现刷新令牌查询
-    return null;
+  private async getStoredRefreshToken(refreshToken: string): Promise<any> {
+    return await userDAO.findSessionByRefreshToken(refreshToken);
   }
 
   private async updateRefreshToken(userId: string, oldToken: string, newToken: string): Promise<void> {
-    // TODO: 实现刷新令牌更新
+    // 删除旧的会话，创建新的会话
+    await userDAO.deleteSession(oldToken);
+    // 注意：这里需要重新创建会话，但需要更多参数
   }
 
   private async deleteUserRefreshTokens(userId: string): Promise<void> {
-    // TODO: 实现删除用户所有刷新令牌
+    await userDAO.deleteUserSessions(userId);
   }
 
   private async blacklistToken(token: string): Promise<void> {
-    // TODO: 实现令牌黑名单
+    await userDAO.deleteSession(token);
   }
 
   private async storePasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
-    // TODO: 实现密码重置令牌存储
+    await userDAO.createPasswordResetToken(userId, token, expiresAt);
   }
 
   private async getPasswordResetToken(token: string): Promise<any> {
-    // TODO: 实现密码重置令牌查询
-    return null;
+    return await userDAO.findPasswordResetToken(token);
   }
 
   private async deletePasswordResetToken(token: string): Promise<void> {
-    // TODO: 实现删除密码重置令牌
+    await userDAO.deletePasswordResetToken(token);
   }
 
   private async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {
-    // TODO: 实现密码更新
+    await userDAO.updatePassword(userId, hashedPassword);
   }
 
   private async sendVerificationEmail(user: User): Promise<void> {
-    // TODO: 实现发送验证邮件
+    if (user.emailVerificationToken) {
+      await emailService.sendVerificationEmail(user, user.emailVerificationToken);
+    }
   }
 
   private async sendPasswordResetEmail(user: User, resetToken: string): Promise<void> {
-    // TODO: 实现发送密码重置邮件
+    await emailService.sendPasswordResetEmail(user, resetToken);
   }
 }

@@ -66,8 +66,17 @@ export interface User extends BaseEntity {
   employeeId?: string;
   hireDate?: Date;
   lastActivityAt?: Date;
-  roles: string[];
-  permissions: string[];
+  userConfig?: Record<string, any>;
+  mfaEnabled?: boolean;
+  mfaSecret?: string;
+  mfaBackupCodes?: string[];
+  passwordChangedAt?: Date;
+  passwordHistory?: string[];
+  failedLoginAttempts?: number;
+  lockedUntil?: Date;
+  emailVerified?: boolean;
+  emailVerificationToken?: string;
+  emailVerificationExpires?: Date;
 }
 
 export enum UserStatus {
@@ -77,11 +86,85 @@ export enum UserStatus {
   DELETED = 'deleted',
 }
 
+// 用户创建数据类型
+export interface CreateUserData {
+  username: string;
+  email: string;
+  password: string;
+  status?: UserStatus;
+  timezone?: string;
+  enterpriseId?: string;
+  departmentId?: string;
+  employeeId?: string;
+  hireDate?: Date;
+  userConfig?: Record<string, any>;
+  emailVerified?: boolean;
+  emailVerificationToken?: string;
+  emailVerificationExpires?: Date;
+}
+
+// 用户更新数据类型
+export interface UpdateUserData {
+  username?: string;
+  email?: string;
+  status?: UserStatus;
+  timezone?: string;
+  enterpriseId?: string;
+  departmentId?: string;
+  employeeId?: string;
+  hireDate?: Date;
+  userConfig?: Record<string, any>;
+  emailVerified?: boolean;
+  mfaEnabled?: boolean;
+}
+
+// 用户会话类型
+export interface UserSession extends BaseEntity {
+  userId: string;
+  sessionToken: string;
+  refreshToken: string;
+  ipAddress?: string;
+  userAgent?: string;
+  expiresAt: Date;
+}
+
+// 密码重置令牌类型
+export interface PasswordResetToken extends BaseEntity {
+  userId: string;
+  resetToken: string;
+  expiresAt: Date;
+  usedAt?: Date;
+}
+
+// 团队相关类型
+export {
+  Team,
+  TeamMember,
+  CreateTeamData,
+  UpdateTeamData,
+  TeamType,
+  TeamStatus,
+  TeamMemberStatus,
+  TeamMemberRole,
+} from '../models/team.model';
+
 // 认证相关类型
 export interface LoginRequest {
   username: string;
   password: string;
   rememberMe?: boolean;
+  ip?: string;
+  userAgent?: string;
+}
+
+export interface AuthResult {
+  success: boolean;
+  message?: string;
+  user?: Partial<User>;
+  token?: string;
+  refreshToken?: string;
+  expiresIn?: string;
+  userId?: string;
 }
 
 export interface RegisterRequest {
@@ -90,10 +173,17 @@ export interface RegisterRequest {
   password: string;
   confirmPassword: string;
   inviteCode?: string;
+  name?: string;
+  avatar?: string;
+  timezone?: string;
+  enterpriseId?: string;
+  departmentId?: string;
 }
 
 export interface ResetPasswordRequest {
-  email: string;
+  email?: string;
+  token?: string;
+  newPassword?: string;
 }
 
 export interface ChangePasswordRequest {

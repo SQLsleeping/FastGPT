@@ -362,6 +362,55 @@ export class DatabaseManager {
   public getRedis(): RedisConnection {
     return this.redis;
   }
+
+  /**
+   * 初始化所有数据库连接
+   */
+  public async initialize(): Promise<void> {
+    try {
+      // 测试PostgreSQL连接
+      await this.postgresql.query('SELECT 1');
+      console.log('✅ PostgreSQL connection established');
+
+      // 测试MongoDB连接（如果需要）
+      if (this.mongodb) {
+        await this.mongodb.connect();
+        console.log('✅ MongoDB connection established');
+      }
+
+      // 测试Redis连接（如果需要）
+      if (this.redis) {
+        await this.redis.connect();
+        console.log('✅ Redis connection established');
+      }
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 关闭所有数据库连接
+   */
+  public async close(): Promise<void> {
+    try {
+      await this.postgresql.close();
+      console.log('PostgreSQL connection closed');
+
+      if (this.mongodb) {
+        await this.mongodb.disconnect();
+        console.log('MongoDB connection closed');
+      }
+
+      if (this.redis) {
+        await this.redis.disconnect();
+        console.log('Redis connection closed');
+      }
+    } catch (error) {
+      console.error('Error closing database connections:', error);
+      throw error;
+    }
+  }
 }
 
 // 导出单例实例

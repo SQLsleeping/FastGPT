@@ -24,12 +24,16 @@ apiRoutes.get('/', (req, res) => {
   res.json({
     message: 'FastGPT User Management Service API',
     version: '1.0.0',
+    status: 'running',
     endpoints: {
       health: '/health',
-      auth: '/auth',
-      enterprises: '/enterprises',
+      ready: '/ready',
+      auth: '/api/v1/auth (not implemented)',
+      enterprises: '/api/v1/enterprises (not implemented)',
+      'enterprise-auth': '/api/v1/enterprise-auth (not implemented)',
     },
-    documentation: '/docs',
+    documentation: '/docs (not implemented)',
+    timestamp: new Date().toISOString(),
   });
 });
 

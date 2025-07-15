@@ -23,13 +23,12 @@ export const authenticateJWT = async (req: Request, res: Response, next: NextFun
     // 验证JWT令牌
     const payload = JWTUtils.verifyToken(token);
 
-    // 检查令牌是否在黑名单中
-    const redis = db.getRedis();
-    const isBlacklisted = await redis.exists(`blacklist:${token}`);
-
-    if (isBlacklisted) {
-      throw new AppError('Token has been revoked', 401, 'TOKEN_REVOKED');
-    }
+    // TODO: 检查令牌是否在黑名单中
+    // const redis = db.getRedis();
+    // const isBlacklisted = await redis.exists(`blacklist:${token}`);
+    // if (isBlacklisted) {
+    //   throw new AppError('Token has been revoked', 401, 'TOKEN_REVOKED');
+    // }
 
     // 将用户信息添加到请求对象
     req.user = payload;

@@ -20,6 +20,7 @@ export const config = {
     port: parseInt(process.env['PORT'] || '3001', 10),
     apiPrefix: process.env['API_PREFIX'] || '/api/v1',
     trustProxy: process.env['TRUST_PROXY'] === 'true',
+    baseUrl: process.env['BASE_URL'] || 'http://localhost:3001',
   },
 
   // 数据库配置
@@ -73,10 +74,8 @@ export const config = {
       host: process.env['SMTP_HOST'] || 'smtp.gmail.com',
       port: parseInt(process.env['SMTP_PORT'] || '587', 10),
       secure: process.env['SMTP_SECURE'] === 'true',
-      auth: {
-        user: process.env['SMTP_USER'] || '',
-        pass: process.env['SMTP_PASSWORD'] || '',
-      },
+      user: process.env['SMTP_USER'] || '',
+      password: process.env['SMTP_PASSWORD'] || '',
     },
     from: process.env['EMAIL_FROM'] || 'noreply@fastgpt.io',
   },
