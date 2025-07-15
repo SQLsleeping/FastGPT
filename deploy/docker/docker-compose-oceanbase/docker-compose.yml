@@ -124,6 +124,57 @@ services:
       timeout: 20s
       retries: 3
 
+  # 用户管理服务
+  user-management-service:
+    container_name: user-management-service
+    build:
+      context: ../../../projects/user-management-service
+      dockerfile: Dockerfile
+    ports:
+      - 3001:3001
+    networks:
+      - fastgpt
+    depends_on:
+      - postgres
+      - mongo
+      - redis
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://fastgpt:fastgpt@postgres:5432/fastgpt
+      - MONGODB_URI=mongodb://myusername:mypassword@mongo:27017/fastgpt?authSource=admin
+      - REDIS_URL=redis://default:mypassword@redis:6379
+      - JWT_SECRET=fastgpt_jwt_secret_key_2024
+      - JWT_EXPIRES_IN=1h
+      - JWT_REFRESH_EXPIRES_IN=7d
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_SECURE=false
+      - SMTP_USER=
+      - SMTP_PASSWORD=
+      - EMAIL_FROM=noreply@fastgpt.io
+
+  # PostgreSQL for user management service
+  postgres:
+    image: postgres:15-alpine
+    container_name: fastgpt-postgres
+    restart: always
+    networks:
+      - fastgpt
+    environment:
+      - POSTGRES_DB=fastgpt
+      - POSTGRES_USER=fastgpt
+      - POSTGRES_PASSWORD=fastgpt
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ../../../projects/user-management-service/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fastgpt -d fastgpt']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   fastgpt:
     container_name: fastgpt
     image: ghcr.io/labring/fastgpt:v4.10.0-fix # git
@@ -136,6 +187,7 @@ services:
       - mongo
       - sandbox
       - ob
+      - user-management-service
     restart: always
     environment:
       # 前端外部可访问的地址，用于自动补全文件资源路径。例如 https:fastgpt.cn，不能填 localhost。这个值可以不填，不填则发给模型的图片会是一个相对路径，而不是全路径，模型可能伪造Host。
@@ -160,7 +212,10 @@ services:
       - AIPROXY_API_ENDPOINT=http://aiproxy:3000
       # AI Proxy 的 Admin Token，与 AI Proxy 中的环境变量 ADMIN_KEY
       - AIPROXY_API_TOKEN=aiproxy
-      
+
+      # 用户管理服务地址
+      - USER_MANAGEMENT_SERVICE_URL=http://user-management-service:3001
+
       # 数据库最大连接数
       - DB_MAX_LINK=30
       # MongoDB 连接参数. 用户名myusername,密码mypassword。

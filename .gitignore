@@ -46,3 +46,5 @@ files/helm/fastgpt/charts/*.tgz
 tmp/
 coverage
 *.sql
+*.meta
+deploy/docker

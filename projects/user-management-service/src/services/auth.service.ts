@@ -55,8 +55,28 @@ export class AuthService extends BaseService {
       }
 
       // 验证密码
-      logger.info('Verifying password', { userId: user.id });
-      const isPasswordValid = await bcrypt.compare(loginData.password, user.password);
+      logger.info('Verifying password', {
+        userId: user.id,
+        passwordLength: loginData.password.length,
+        passwordFirst3: loginData.password.substring(0, 3),
+        storedPasswordLength: user.password.length,
+        storedPasswordFirst10: user.password.substring(0, 10)
+      });
+
+      // 检查密码是否是SHA256哈希（64个字符的十六进制字符串）
+      const isSHA256Hash = /^[a-f0-9]{64}$/i.test(loginData.password);
+      let isPasswordValid = false;
+
+      if (isSHA256Hash) {
+        // 如果是SHA256哈希，直接与存储的哈希比较（用于FastGPT兼容性）
+        logger.info('Detected SHA256 hash password from FastGPT');
+        isPasswordValid = await bcrypt.compare(loginData.password, user.password);
+      } else {
+        // 如果是原始密码，正常验证
+        logger.info('Detected plain text password');
+        isPasswordValid = await bcrypt.compare(loginData.password, user.password);
+      }
+
       logger.info('Password verification result', { userId: user.id, isValid: isPasswordValid });
 
       if (!isPasswordValid) {
@@ -463,5 +483,39 @@ export class AuthService extends BaseService {
 
   private async sendPasswordResetEmail(user: User, resetToken: string): Promise<void> {
     await emailService.sendPasswordResetEmail(user, resetToken);
+  }
+
+  /**
+   * 检查用户是否存在
+   */
+  async checkUserExists(username?: string, email?: string): Promise<boolean> {
+    try {
+      if (username) {
+        const user = await this.findUserByUsernameOrEmail(username);
+        if (user) return true;
+      }
+
+      if (email) {
+        const user = await this.findUserByEmail(email);
+        if (user) return true;
+      }
+
+      return false;
+    } catch (error) {
+      logger.error('Check user exists error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 根据ID查找用户
+   */
+  async findUserById(id: string): Promise<User | null> {
+    try {
+      return await userDAO.findById(id);
+    } catch (error) {
+      logger.error('Find user by ID error:', error);
+      return null;
+    }
   }
 }

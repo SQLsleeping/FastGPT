@@ -319,4 +319,83 @@ export class AuthController extends BaseController {
 
     return { isValid: true, message: '' };
   }
+
+  /**
+   * 检查用户是否存在
+   */
+  async checkUser(req: Request, res: Response): Promise<void> {
+    try {
+      const { username, email } = req.body;
+
+      if (!username && !email) {
+        res.status(400).json({
+          success: false,
+          error: 'Username or email is required',
+          code: 'INVALID_PARAMS'
+        });
+        return;
+      }
+
+      const exists = await this.authService.checkUserExists(username, email);
+
+      res.json({
+        success: true,
+        data: {
+          exists,
+          username,
+          email
+        }
+      });
+
+    } catch (error) {
+      logger.error('Check user error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  }
+
+  /**
+   * 根据ID获取用户信息
+   */
+  async getUserById(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          error: 'User ID is required',
+          code: 'INVALID_PARAMS'
+        });
+        return;
+      }
+
+      const user = await this.authService.findUserById(id);
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        data: this.authService.sanitizeUser(user)
+      });
+
+    } catch (error) {
+      logger.error('Get user by ID error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  }
 }
