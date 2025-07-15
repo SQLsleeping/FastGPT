@@ -1,0 +1,15 @@
+{
+  "root": false,
+  "env": {
+    "node": true
+  },
+  "ignorePatterns": [
+    "dist/",
+    "start-simple.js"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "no-console": "off"
+  }
+}

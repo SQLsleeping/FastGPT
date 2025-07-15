@@ -1,0 +1,108 @@
+{
+  "name": "@fastgpt/user-management-service",
+  "version": "1.0.0",
+  "description": "FastGPT独立用户管理服务 - 企业级多租户用户管理系统",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:watch": "vitest --watch",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json}\"",
+    "type-check": "tsc --noEmit",
+    "docker:build": "docker build -t fastgpt/user-management-service .",
+    "docker:run": "docker run -p 3001:3001 fastgpt/user-management-service",
+    "migrate": "node migrations/migrate.js up",
+    "migrate:status": "node migrations/migrate.js status",
+    "migrate:create": "node migrations/migrate.js create",
+    "db:setup": "npm run migrate",
+    "db:reset": "echo 'Warning: This will drop all tables. Use with caution.' && read -p 'Continue? (y/N): ' confirm && [ \"$confirm\" = 'y' ] && npm run db:drop && npm run migrate",
+    "db:drop": "node -e \"const { Client } = require('pg'); const client = new Client(process.env.DATABASE_URL); client.connect().then(() => client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')).then(() => client.end()).catch(console.error);\""
+  },
+  "keywords": [
+    "fastgpt",
+    "user-management",
+    "enterprise",
+    "multi-tenant",
+    "rbac",
+    "authentication",
+    "authorization"
+  ],
+  "author": "FastGPT Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "bcryptjs": "^2.4.3",
+    "bull": "^4.12.2",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "dayjs": "^1.11.10",
+    "dotenv": "^16.5.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "mongoose": "^8.12.1",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.7",
+    "pg": "^8.14.0",
+    "qrcode": "^1.5.3",
+    "redis": "^4.7.1",
+    "speakeasy": "^2.0.0",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/lodash": "^4.14.202",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.17.24",
+    "@types/nodemailer": "^6.4.14",
+    "@types/pg": "^8.11.11",
+    "@types/qrcode": "^1.5.5",
+    "@types/speakeasy": "^2.0.10",
+    "@types/supertest": "^6.0.2",
+    "@types/uuid": "^9.0.8",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "@vitest/coverage-v8": "^1.0.4",
+    "eslint": "^8.55.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "nodemon": "^3.0.2",
+    "prettier": "^3.1.0",
+    "supertest": "^6.3.3",
+    "ts-node": "^10.9.1",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run type-check && npm run test"
+    }
+  }
+}
