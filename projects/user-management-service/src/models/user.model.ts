@@ -320,6 +320,7 @@ export class UserDAO {
       email: row.email,
       password: row.password,
       status: row.status as UserStatus,
+      role: row.role,
       timezone: row.timezone,
       lastLoginTmbId: row.last_login_tmb_id,
       inviterId: row.inviter_id,

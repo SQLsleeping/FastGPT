@@ -140,7 +140,7 @@ export const teamApi = {
     apiCall('GET', `/teams/${teamId}/members`),
 
   addTeamMember: (teamId: string, data: { userId: string; role: string }): Promise<ApiResponse> =>
-    apiCall('POST', `/teams/${teamId}/invite`, data),
+    apiCall('POST', `/teams/${teamId}/members`, data),
 
   updateMemberRole: (teamId: string, memberId: string, data: { role: string }): Promise<ApiResponse> =>
     apiCall('PUT', `/teams/${teamId}/members/${memberId}/role`, data),

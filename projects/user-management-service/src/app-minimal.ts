@@ -336,20 +336,27 @@ class MinimalApp {
         // 生成用户ID
         const userId = require('crypto').randomBytes(12).toString('hex');
 
+        // 加密密码 - 使用与FastGPT兼容的格式：先SHA256哈希，再bcrypt加密
+        const bcrypt = require('bcryptjs');
+        const crypto = require('crypto');
+        const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
+        const hashedPassword = await bcrypt.hash(sha256Hash, 12);
+
         // 创建用户
         const createUserQuery = `
           INSERT INTO users (
-            id, username, email, password, status, timezone, created_at, updated_at
+            id, username, email, password, role, status, timezone, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, NOW(), NOW()
-          ) RETURNING id, username, email, status, timezone, created_at, updated_at
+            $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+          ) RETURNING id, username, email, password, role, status, timezone, created_at, updated_at
         `;
 
         const newUserResult = await pool.query(createUserQuery, [
           userId,
           username,
           email,
-          password, // 在实际应用中应该加密密码
+          hashedPassword, // 使用FastGPT兼容格式加密的密码
+          role,
           status,
           'Asia/Shanghai'
         ]);
@@ -360,7 +367,7 @@ class MinimalApp {
           username: newUser.username,
           email: newUser.email,
           status: newUser.status,
-          role: role,
+          role: newUser.role,
           timezone: newUser.timezone || 'Asia/Shanghai',
           lastLoginAt: null,
           createdAt: newUser.created_at,
@@ -425,6 +432,18 @@ class MinimalApp {
           paramIndex++;
         }
 
+        if (updates.password) {
+          // 使用与FastGPT兼容的密码格式：先SHA256哈希，再bcrypt加密
+          const bcrypt = require('bcryptjs');
+          const crypto = require('crypto');
+          const sha256Hash = crypto.createHash('sha256').update(updates.password).digest('hex');
+          const hashedPassword = await bcrypt.hash(sha256Hash, 12);
+
+          updateFields.push(`password = $${paramIndex}`);
+          updateValues.push(hashedPassword);
+          paramIndex++;
+        }
+
         updateFields.push(`updated_at = NOW()`);
         updateValues.push(id);
 
@@ -432,7 +451,7 @@ class MinimalApp {
           UPDATE users
           SET ${updateFields.join(', ')}
           WHERE id = $${paramIndex}
-          RETURNING id, username, email, status, timezone, created_at, updated_at
+          RETURNING id, username, email, status, role, timezone, created_at, updated_at
         `;
 
         const updatedUserResult = await pool.query(updateUserQuery, updateValues);
@@ -443,7 +462,7 @@ class MinimalApp {
           username: updatedUser.username,
           email: updatedUser.email,
           status: updatedUser.status,
-          role: updates.role || 'user',
+          role: updatedUser.role,
           timezone: updatedUser.timezone || 'Asia/Shanghai',
           lastLoginAt: null,
           createdAt: updatedUser.created_at,
@@ -1065,6 +1084,12 @@ class MinimalApp {
       this.requireTeamAdmin,
       this.teamController.inviteUser.bind(this.teamController),
     );
+    this.app.post(
+      '/api/v1/teams/:teamId/members',
+      authenticateJWT,
+      this.requireTeamAdmin,
+      this.teamController.addMember.bind(this.teamController),
+    );
     this.app.put(
       '/api/v1/teams/:teamId/members/:memberId/role',
       authenticateJWT,
@@ -1133,6 +1158,12 @@ class MinimalApp {
       await db.initialize();
       logger.info('Database connection established');
 
+      // 确保数据库表结构正确
+      await this.ensureTableStructure();
+
+      // 确保管理员用户存在
+      await this.ensureAdminUser();
+
       // 启动服务器
       const server = this.app.listen(config.app.port, () => {
         logger.info(`🚀 User Management Service (Minimal) is running on port ${config.app.port}`);
@@ -1175,6 +1206,7 @@ class MinimalApp {
   private requireTeamAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
     try {
       const userId = req.user?.userId;
+      const userRole = req.user?.role;
       const teamId = req.params.teamId;
 
       if (!userId || !teamId) {
@@ -1183,6 +1215,12 @@ class MinimalApp {
           error: 'User ID and Team ID are required',
           code: 'MISSING_PARAMETERS'
         });
+        return;
+      }
+
+      // 超级管理员可以管理所有团队
+      if (userRole === 'super_admin') {
+        next();
         return;
       }
 
@@ -1213,6 +1251,7 @@ class MinimalApp {
   private requireTeamMember = async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
     try {
       const userId = req.user?.userId;
+      const userRole = req.user?.role;
       const teamId = req.params.teamId;
 
       if (!userId || !teamId) {
@@ -1221,6 +1260,12 @@ class MinimalApp {
           error: 'User ID and Team ID are required',
           code: 'MISSING_PARAMETERS'
         });
+        return;
+      }
+
+      // 超级管理员可以访问所有团队
+      if (userRole === 'super_admin') {
+        next();
         return;
       }
 
@@ -1244,6 +1289,93 @@ class MinimalApp {
       });
     }
   };
+
+  /**
+   * 确保数据库表结构正确
+   */
+  private async ensureTableStructure(): Promise<void> {
+    try {
+      const pool = db.getPostgreSQL();
+
+      // 检查并添加role列
+      const checkRoleColumnQuery = `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'role'
+      `;
+
+      const roleColumnResult = await pool.query(checkRoleColumnQuery);
+
+      if (roleColumnResult.rows.length === 0) {
+        // 添加role列
+        const addRoleColumnQuery = `
+          ALTER TABLE users
+          ADD COLUMN role VARCHAR(50) DEFAULT 'user'
+        `;
+
+        await pool.query(addRoleColumnQuery);
+        logger.info('Added role column to users table');
+      }
+    } catch (error) {
+      logger.error('Failed to ensure table structure:', error);
+    }
+  }
+
+  /**
+   * 确保管理员用户存在并使用正确的密码格式
+   */
+  private async ensureAdminUser(): Promise<void> {
+    try {
+      const pool = db.getPostgreSQL();
+      const bcrypt = require('bcryptjs');
+      const crypto = require('crypto');
+
+      // 使用与FastGPT相同的密码处理方式：先SHA256哈希，再bcrypt加密
+      const sha256Hash = crypto.createHash('sha256').update('admin123').digest('hex');
+      const hashedPassword = await bcrypt.hash(sha256Hash, 12);
+
+      // 检查管理员用户是否已存在
+      const checkQuery = 'SELECT id FROM users WHERE id = $1';
+      const existingAdmin = await pool.query(checkQuery, ['admin-001']);
+
+      if (existingAdmin.rows.length === 0) {
+        // 创建管理员用户
+        const insertQuery = `
+          INSERT INTO users (
+            id, username, email, password, role, status, timezone, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+          )
+        `;
+
+        await pool.query(insertQuery, [
+          'admin-001',
+          'admin',
+          'admin@fastgpt.com',
+          hashedPassword,
+          'super_admin',
+          'active',
+          'Asia/Shanghai'
+        ]);
+
+        logger.info('Admin user created successfully with FastGPT-compatible password');
+      } else {
+        // 更新现有管理员用户的密码和角色为FastGPT兼容格式
+        const updateQuery = `
+          UPDATE users
+          SET password = $1, role = $2, updated_at = NOW()
+          WHERE id = $3
+        `;
+
+        await pool.query(updateQuery, [hashedPassword, 'super_admin', 'admin-001']);
+
+        logger.info('Admin user password and role updated to FastGPT-compatible format');
+      }
+    } catch (error) {
+      logger.error('Failed to ensure admin user:', error);
+      // 不抛出错误，因为这不应该阻止应用启动
+    }
+  }
 }
 
 // 启动应用

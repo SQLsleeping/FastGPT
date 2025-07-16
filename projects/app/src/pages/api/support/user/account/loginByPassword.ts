@@ -30,19 +30,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // 检查是否是用户管理服务的用户
   const isUMSUser = code === 'UMS_USER';
 
-  // 如果是用户管理服务用户，验证特殊验证码
-  if (isUMSUser) {
-    try {
-      await authCode({
-        key: username,
-        code,
-        type: UserAuthTypeEnum.login
-      });
-    } catch (error) {
-      console.log('UMS user auth code verification failed:', error);
-      return Promise.reject(CommonErrEnum.invalidParams);
-    }
-  }
+  // UMS用户不需要验证码验证，直接跳过
 
   // 首先尝试我们的用户管理服务
   let userManagementServiceSuccess = false;
@@ -60,7 +48,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       },
       body: JSON.stringify({
         username,
-        password,
+        password, // 这里的password已经是前端发送的SHA256哈希
       }),
     });
 

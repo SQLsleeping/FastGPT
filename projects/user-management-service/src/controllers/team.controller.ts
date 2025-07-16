@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { BaseController } from './base.controller';
 import { teamService } from '../services/team.service';
-import { CreateTeamData, UpdateTeamData, TeamMemberRole } from '../types';
+import { CreateTeamData, UpdateTeamData, TeamMemberRole, AppError } from '../types';
 import { logger } from '../utils';
 
 /**
@@ -224,6 +224,67 @@ export class TeamController extends BaseController {
   };
 
   /**
+   * 直接添加现有用户到团队
+   */
+  public addMember = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUserId = req.user?.userId;
+      if (!currentUserId) {
+        this.error(res, 'Authentication required', 401);
+        return;
+      }
+
+      const { teamId } = req.params;
+      const { userId, role } = req.body;
+
+      if (!teamId) {
+        this.error(res, 'Team ID is required', 400);
+        return;
+      }
+
+      if (!userId) {
+        this.error(res, 'User ID is required', 400);
+        return;
+      }
+
+      if (!role || !Object.values(TeamMemberRole).includes(role)) {
+        this.error(res, 'Valid role is required', 400);
+        return;
+      }
+
+      await teamService.addMember(teamId, userId, role, currentUserId);
+
+      logger.info('User added to team directly via API', {
+        teamId,
+        userId,
+        role,
+        addedBy: currentUserId,
+        ip: req.ip,
+      });
+
+      this.success(res, {
+        message: 'User added to team successfully',
+      });
+    } catch (error) {
+      logger.error('Failed to add user to team:', error);
+
+      if (error instanceof Error) {
+        if (error.message.includes('User not found')) {
+          this.notFound(res, 'User not found');
+        } else if (error.message.includes('already exists') || error.message.includes('already a member')) {
+          this.conflict(res, 'User is already a member of this team');
+        } else if (error.message.includes('Team not found')) {
+          this.notFound(res, 'Team not found');
+        } else {
+          this.error(res, error.message, 400);
+        }
+      } else {
+        this.serverError(res, 'Failed to add user to team');
+      }
+    }
+  };
+
+  /**
    * 获取团队成员列表
    */
   public getTeamMembers = async (req: Request, res: Response): Promise<void> => {
@@ -325,7 +386,12 @@ export class TeamController extends BaseController {
       });
     } catch (error) {
       logger.error('Member removal failed:', error);
-      this.handleError(res, error);
+
+      if (error instanceof AppError) {
+        this.error(res, error.message, error.statusCode);
+      } else {
+        this.error(res, 'Internal server error', 500);
+      }
     }
   };
 

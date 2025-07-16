@@ -213,6 +213,54 @@ export class TeamService extends BaseService {
   }
 
   /**
+   * 直接添加现有用户到团队
+   */
+  public async addMember(
+    teamId: string,
+    userId: string,
+    role: TeamMemberRole,
+    addedBy: string,
+  ): Promise<void> {
+    try {
+      // 检查添加者是否有权限（超级管理员或团队管理员）
+      // 注意：这里不检查权限，因为在控制器层已经通过中间件检查了
+
+      // 查找被添加的用户
+      const user = await userDAO.findById(userId);
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      // 检查用户是否已经是团队成员
+      const isMember = await teamDAO.isMember(teamId, userId);
+      if (isMember) {
+        throw new AppError('User is already a team member', 409, 'ALREADY_MEMBER');
+      }
+
+      // 添加用户到团队
+      await teamDAO.addMember({
+        teamId,
+        userId,
+        name: user.username,
+        role,
+        status: TeamMemberStatus.ACTIVE,
+        invitedBy: addedBy,
+      });
+
+      logger.info('User added to team successfully', {
+        teamId,
+        userId,
+        username: user.username,
+        role,
+        addedBy,
+      });
+    } catch (error) {
+      logger.error('Failed to add user to team:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 获取团队成员列表
    */
   public async getTeamMembers(teamId: string, userId: string): Promise<TeamMember[]> {
@@ -299,8 +347,24 @@ export class TeamService extends BaseService {
   public async removeMember(teamId: string, memberId: string, removerId: string): Promise<void> {
     try {
       // 检查移除者是否有权限
-      const isAdmin = await teamDAO.isAdminOrOwner(teamId, removerId);
-      if (!isAdmin && removerId !== memberId) {
+      // 1. 超级管理员可以移除任何成员
+      // 2. 团队管理员/所有者可以移除成员
+      // 3. 用户可以移除自己
+      const removerUser = await userDAO.findById(removerId);
+      const isSuperAdmin = removerUser?.role === 'super_admin';
+      const isTeamAdmin = await teamDAO.isAdminOrOwner(teamId, removerId);
+
+      logger.info('Permission check for member removal', {
+        removerId,
+        memberId,
+        teamId,
+        removerUser: removerUser ? { id: removerUser.id, role: removerUser.role } : null,
+        isSuperAdmin,
+        isTeamAdmin,
+        canRemoveSelf: removerId === memberId
+      });
+
+      if (!isSuperAdmin && !isTeamAdmin && removerId !== memberId) {
         throw new AppError('Access denied', 403, 'ACCESS_DENIED');
       }
 
